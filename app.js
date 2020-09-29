@@ -1,8 +1,11 @@
+require("dotenv").config();
 const express = require("express");
 const morgan = require("morgan");
 const mongoose = require("mongoose");
 const session = require("express-session");
 const MongoDBStore = require("connect-mongodb-session")(session);
+const flash = require("connect-flash");
+const config = require("config");
 
 // Import routes
 const authRoutes = require("./routes/authRoute");
@@ -13,8 +16,11 @@ const { bindUserWithRequest } = require("./middleware/authMiddleware");
 const setLocals = require("./middleware/setLocals");
 
 // playground routes
-const MONGODB_URI =
-  "mongodb+srv://rootAdmin:FxYANcbrVbA7M1lW@cluster0.7clce.mongodb.net/exp-blog?retryWrites=true&w=majority";
+// const validatorRoute = require("./playground/validator");
+
+const MONGODB_URI = `mongodb+srv://${config.get("db-username")}:${config.get(
+  "db-password"
+)}@cluster0.7clce.mongodb.net/exp-blog?retryWrites=true&w=majority`;
 const store = new MongoDBStore({
   uri: MONGODB_URI,
   collection: "sessions",
@@ -23,30 +29,38 @@ const store = new MongoDBStore({
 
 const app = express();
 
+console.log(config.get("name"));
+
+if (app.get("env").toLowerCase() === "development") {
+  app.use(morgan("dev"));
+}
+
 // setup view enginee
 app.set("view engine", "ejs");
 app.set("views", "views");
 
 // Middleware array
 const middleware = [
-  morgan("dev"),
   express.static("public"),
   express.urlencoded({ extended: true }),
   express.json(),
   session({
-    secret: process.env.SECRET_KEY || "SECRET_KEY",
+    secret: config.get("secret"),
     resave: false,
     saveUninitialized: false,
     store: store,
   }),
   bindUserWithRequest(),
   setLocals(),
+  flash(),
 ];
 
 app.use(middleware);
 
 app.use("/auth", authRoutes);
 app.use("/dashboard", dashboardRoutes);
+// app.use("/playground", validatorRoute);
+
 app.get("/", (req, res) => {
   res.json({
     message: "hello world",
@@ -55,13 +69,10 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 mongoose
-  .connect(
-    "mongodb+srv://rootAdmin:FxYANcbrVbA7M1lW@cluster0.7clce.mongodb.net/exp-blog?retryWrites=true&w=majority",
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    }
-  )
+  .connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
   .then(() => {
     app.listen(PORT, () => {
       console.log("database connected");
