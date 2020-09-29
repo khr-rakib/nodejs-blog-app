@@ -1,12 +1,31 @@
 const User = require("../models/User");
 const bcrypt = require("bcrypt");
+const { validationResult } = require("express-validator");
+const errorFormatter = require("../utils/validationErrorFormatter");
 
 exports.signupGetController = (req, res, next) => {
-  res.render("pages/auth/signup", { title: "Create A New Account" });
+  res.render("pages/auth/signup", {
+    title: "Create A New Account",
+    error: {},
+    value: {},
+  });
 };
 
 exports.signupPostController = async (req, res, next) => {
   const { username, email, password } = req.body;
+
+  let errors = validationResult(req).formatWith(errorFormatter);
+  if (!errors.isEmpty()) {
+    return res.render("pages/auth/signup", {
+      title: "Create A New Account",
+      error: errors.mapped(),
+      value: {
+        username,
+        email,
+        password,
+      },
+    });
+  }
 
   try {
     let hashedPassword = await bcrypt.hash(password, 11);
@@ -26,11 +45,24 @@ exports.signupPostController = async (req, res, next) => {
 };
 
 exports.loginGetController = (req, res) => {
-  res.render("pages/auth/login", { title: "Login Your Account" });
+  console.log(req.session);
+  res.render("pages/auth/login", {
+    title: "Login Your Account",
+    error: {},
+  });
 };
 
 exports.loginPostController = async (req, res, next) => {
   let { email, password } = req.body;
+
+  let errors = validationResult(req).formatWith(errorFormatter);
+  if (!errors.isEmpty()) {
+    return res.render("pages/auth/login", {
+      title: "Login to your account",
+      error: errors.mapped(),
+    });
+  }
+
   try {
     let user = await User.findOne({ email });
 
@@ -43,12 +75,27 @@ exports.loginPostController = async (req, res, next) => {
       return res.send("invalid credientials");
     }
 
-    console.log("success login ", user);
-    res.render("pages/auth/login", { title: "Login Your Account" });
+    req.session.isLoggedIn = true;
+    req.session.user = user;
+    req.session.save((err) => {
+      if (err) {
+        console.log(err);
+        return next(err);
+      }
+      res.redirect("/dashboard");
+    });
   } catch (e) {
     console.log(e);
     next();
   }
 };
 
-exports.logoutController = (req, res, next) => {};
+exports.logoutController = (req, res, next) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.log(err);
+      return next(err);
+    }
+    return res.redirect("/auth/login");
+  });
+};
